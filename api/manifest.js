@@ -20,62 +20,62 @@ export default function handler(req, res) {
       {
         type: "movie",
         id: "netflix_movies",
-        name: "Netflix Films"
+        name: "Netflix"
       },
       {
         type: "series",
         id: "netflix_series",
-        name: "Netflix Séries"
+        name: "Netflix"
       },
       {
         type: "movie",
         id: "prime_movies",
-        name: "Amazon Prime Films"
+        name: "Amazon Prime"
       },
       {
         type: "series",
         id: "prime_series",
-        name: "Amazon Prime Séries"
+        name: "Amazon Prime"
       },
       {
         type: "movie",
         id: "disney_movies",
-        name: "Disney+ Films"
+        name: "Disney+"
       },
       {
         type: "series",
         id: "disney_series",
-        name: "Disney+ Séries"
+        name: "Disney+"
       },
       {
         type: "movie",
         id: "appletv_movies",
-        name: "Apple TV+ Films"
+        name: "Apple TV+"
       },
       {
         type: "series",
         id: "appletv_series",
-        name: "Apple TV+ Séries"
+        name: "Apple TV+"
       },
       {
         type: "movie",
         id: "canal_movies",
-        name: "Canal+ Films"
+        name: "Canal+"
       },
       {
         type: "series",
         id: "canal_series",
-        name: "Canal+ Séries"
+        name: "Canal+"
       },
       {
         type: "movie",
         id: "hbo_movies",
-        name: "HBO Max Films"
+        name: "HBO Max"
       },
       {
         type: "series",
         id: "hbo_series",
-        name: "HBO Max Séries"
+        name: "HBO Max"
       }
     ],
     resources: ["catalog", "meta", "stream"],
