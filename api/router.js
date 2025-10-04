@@ -1,4 +1,5 @@
 // api/router.js
+import { enrichMetadataFromIMDB } from './tmdb.js';
 
 // === Helpers ===
 function sendJSON(res, obj, status = 200) {
@@ -17,6 +18,43 @@ function stripJson(s) {
 
 function fetchPosterFromIMDb(id) {
   return `https://images.metahub.space/poster/small/${id}/img`;
+}
+
+const metadataCache = new Map();
+
+async function getEnrichedMetadata(imdbId, fallbackData) {
+  if (metadataCache.has(imdbId)) {
+    return metadataCache.get(imdbId);
+  }
+
+  const tmdbData = await enrichMetadataFromIMDB(imdbId);
+
+  if (!tmdbData) {
+    return fallbackData;
+  }
+
+  const enriched = {
+    ...fallbackData,
+    name: tmdbData.name || fallbackData.name,
+    description: tmdbData.description || fallbackData.description,
+    poster: tmdbData.poster || fallbackData.poster,
+    background: tmdbData.background || fallbackData.background,
+    logo: tmdbData.logo || fallbackData.logo,
+    genres: tmdbData.genres.length > 0 ? tmdbData.genres : fallbackData.genres,
+    releaseInfo: tmdbData.releaseInfo || fallbackData.releaseInfo,
+    imdbRating: tmdbData.imdbRating || fallbackData.imdbRating,
+    runtime: tmdbData.runtime,
+    cast: tmdbData.cast,
+    director: tmdbData.director,
+    trailer: tmdbData.trailer,
+    tagline: tmdbData.tagline,
+    voteCount: tmdbData.voteCount,
+    status: tmdbData.status,
+    productionCompanies: tmdbData.productionCompanies
+  };
+
+  metadataCache.set(imdbId, enriched);
+  return enriched;
 }
 
 // === Catalogue ===
@@ -884,55 +922,38 @@ export default function handler(req, res) {
     console.log('Catalog request - Type:', catalogType, 'ID:', catalogId);
 
     let metas = [];
+    let items = [];
 
     if (catalogId === 'directhls_series') {
-      metas = catalogData
-        .filter(item => item.type === 'series' && !item.catalog)
-        .map(item => ({
-          id: item.id,
-          type: item.type,
-          name: item.name,
-          poster: item.poster,
-          posterShape: "regular",
-          description: item.description,
-          genres: item.genres,
-          background: item.background,
-          logo: item.logo,
-          releaseInfo: item.releaseInfo,
-          imdbRating: item.imdbRating
-        }));
+      items = catalogData.filter(item => item.type === 'series' && !item.catalog);
     } else if (catalogId.includes('_movies')) {
       const platform = catalogId.replace('_movies', '');
-      metas = catalogData
-        .filter(item => item.type === 'movie' && item.catalog === platform)
-        .map(item => ({
-          id: item.id,
-          type: item.type,
-          name: item.name,
-          poster: item.poster,
-          posterShape: "regular",
-          description: item.description,
-          genres: item.genres,
-          background: item.background,
-          releaseInfo: item.releaseInfo,
-          imdbRating: item.imdbRating
-        }));
+      items = catalogData.filter(item => item.type === 'movie' && item.catalog === platform);
     } else if (catalogId.includes('_series')) {
       const platform = catalogId.replace('_series', '');
-      metas = catalogData
-        .filter(item => item.type === 'series' && item.catalog === platform)
-        .map(item => ({
-          id: item.id,
-          type: item.type,
-          name: item.name,
-          poster: item.poster,
-          posterShape: "regular",
-          description: item.description,
-          genres: item.genres,
-          background: item.background,
-          releaseInfo: item.releaseInfo,
-          imdbRating: item.imdbRating
-        }));
+      items = catalogData.filter(item => item.type === 'series' && item.catalog === platform);
+    }
+
+    for (const item of items) {
+      let metadata = item;
+
+      if (item.id.startsWith('tt')) {
+        metadata = await getEnrichedMetadata(item.id, item);
+      }
+
+      metas.push({
+        id: metadata.id,
+        type: metadata.type,
+        name: metadata.name,
+        poster: metadata.poster,
+        posterShape: "regular",
+        description: metadata.description,
+        genres: metadata.genres,
+        background: metadata.background,
+        logo: metadata.logo,
+        releaseInfo: metadata.releaseInfo,
+        imdbRating: metadata.imdbRating
+      });
     }
 
     console.log('Sending catalog with', metas.length, 'items');
@@ -953,11 +974,17 @@ export default function handler(req, res) {
       return sendJSON(res, { meta: null }, 404);
     }
 
-    if (item.type === 'series') {
+    let enrichedItem = item;
+
+    if (item.id.startsWith('tt')) {
+      enrichedItem = await getEnrichedMetadata(item.id, item);
+    }
+
+    if (enrichedItem.type === 'series') {
       const videos = [];
 
-      Object.keys(item.episodes || {}).forEach(seasonNum => {
-        const seasonEpisodes = item.episodes[seasonNum];
+      Object.keys(enrichedItem.episodes || {}).forEach(seasonNum => {
+        const seasonEpisodes = enrichedItem.episodes[seasonNum];
         seasonEpisodes.forEach(episode => {
           videos.push({
             id: episode.id,
@@ -972,33 +999,43 @@ export default function handler(req, res) {
       });
 
       const meta = {
-        id: item.id,
-        type: item.type,
-        name: item.name,
-        poster: item.poster,
-        background: item.background,
-        logo: item.logo,
-        description: item.description,
-        genres: item.genres,
-        releaseInfo: item.releaseInfo,
-        imdbRating: item.imdbRating,
+        id: enrichedItem.id,
+        type: enrichedItem.type,
+        name: enrichedItem.name,
+        poster: enrichedItem.poster,
+        background: enrichedItem.background,
+        logo: enrichedItem.logo,
+        description: enrichedItem.description,
+        genres: enrichedItem.genres,
+        releaseInfo: enrichedItem.releaseInfo,
+        imdbRating: enrichedItem.imdbRating,
+        runtime: enrichedItem.runtime,
+        cast: enrichedItem.cast,
+        director: enrichedItem.director,
+        trailer: enrichedItem.trailer,
         posterShape: "regular",
         videos: videos
       };
 
       console.log('Sending series meta with', videos.length, 'episodes');
       return sendJSON(res, { meta });
-    } else if (item.type === 'movie') {
+    } else if (enrichedItem.type === 'movie') {
       const meta = {
-        id: item.id,
-        type: item.type,
-        name: item.name,
-        poster: item.poster,
-        background: item.background,
-        description: item.description,
-        genres: item.genres,
-        releaseInfo: item.releaseInfo,
-        imdbRating: item.imdbRating,
+        id: enrichedItem.id,
+        type: enrichedItem.type,
+        name: enrichedItem.name,
+        poster: enrichedItem.poster,
+        background: enrichedItem.background,
+        logo: enrichedItem.logo,
+        description: enrichedItem.description,
+        genres: enrichedItem.genres,
+        releaseInfo: enrichedItem.releaseInfo,
+        imdbRating: enrichedItem.imdbRating,
+        runtime: enrichedItem.runtime,
+        cast: enrichedItem.cast,
+        director: enrichedItem.director,
+        trailer: enrichedItem.trailer,
+        tagline: enrichedItem.tagline,
         posterShape: "regular"
       };
 
